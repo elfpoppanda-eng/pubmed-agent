@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>药物安全性文献监测工具 — PubMed Literature Surveillance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f7f6f1; --ink: #1c211e; --ink-soft: #565f59; --line: #d8d6cc;
+    --panel: #ffffff; --primary: #1f4d42; --primary-soft: #e6ede9;
+    --signal: #b3591c; --signal-soft: #fbeee0;
+    --caution: #8a6d1f; --caution-soft: #f7f0d8;
+    --ai: #4a3b7a; --ai-soft: #ece8f5;
+    --mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+    --serif: 'Source Serif 4', Georgia, 'Songti SC', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #141815; --ink: #eae7de; --ink-soft: #9aa39c; --line: #333a34;
+      --panel: #1b201c; --primary: #7fc4ae; --primary-soft: #1f2b26;
+      --signal: #e8935a; --signal-soft: #2e2117;
+      --caution: #d9b95a; --caution-soft: #2e2a17;
+      --ai: #b3a3e8; --ai-soft: #241f36;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  .masthead { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 32px; }
+  .masthead .kicker { font-family: var(--mono); font-size: 12.5px; color: var(--primary); margin-bottom: 10px; }
+  .masthead h1 { font-family: var(--serif); font-weight: 600; font-size: 27px; line-height: 1.3; margin: 0 0 8px; }
+  .masthead .sub { font-size: 14px; color: var(--ink-soft); }
+
+  form {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 2px;
+    padding: 24px; margin-bottom: 32px; display: grid; gap: 16px;
+  }
+  .field label { display: block; font-size: 13px; color: var(--ink-soft); margin-bottom: 6px; }
+  .field input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 2px;
+    background: var(--paper); color: var(--ink); font-family: var(--mono); font-size: 14px;
+  }
+  .field input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .field-row { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
+  button {
+    background: var(--primary); color: var(--paper); border: none; border-radius: 2px;
+    padding: 13px 20px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: var(--sans);
+  }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #status { font-size: 13.5px; color: var(--ink-soft); font-family: var(--mono); margin-bottom: 24px; white-space: pre-line; }
+  #error { color: var(--signal); font-size: 14px; margin-bottom: 24px; display: none; }
+
+  #results { display: none; }
+  section { margin-bottom: 36px; }
+  h2 { font-family: var(--serif); font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+  .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 14px; }
+
+  .summary-bar {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); padding: 16px 20px; margin-bottom: 32px;
+  }
+  .summary-bar .n { font-family: var(--serif); font-size: 24px; font-weight: 600; }
+  .summary-bar .l { font-size: 12px; color: var(--ink-soft); }
+
+  .paper-card {
+    border: 1px solid var(--line); border-left: 3px solid var(--line);
+    padding: 14px 16px; margin-bottom: 10px; background: var(--panel);
+  }
+  .paper-card.priority { border-left-color: var(--primary); background: var(--primary-soft); }
+  .paper-card.caution { border-left-color: var(--caution); background: var(--caution-soft); }
+  .paper-title { font-size: 14.5px; font-weight: 500; margin-bottom: 6px; }
+  .paper-meta { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+  .paper-meta a { color: var(--primary); text-decoration: none; }
+  .paper-meta a:hover { text-decoration: underline; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 1px 6px; border-radius: 2px; margin-left: 8px; vertical-align: middle;
+  }
+  .tag.priority { background: var(--primary); color: var(--paper); }
+  .tag.caution { background: var(--caution); color: var(--paper); }
+
+  .excluded-note {
+    font-size: 13px; color: var(--ink-soft); background: var(--panel);
+    border: 1px solid var(--line); padding: 12px 16px; margin-top: 8px;
+  }
+
+  .ai-panel {
+    background: var(--ai-soft); border: 1px solid var(--ai); border-left: 3px solid var(--ai);
+    padding: 22px 24px;
+  }
+  .ai-panel .ai-label {
+    font-family: var(--mono); font-size: 12px; color: var(--ai); margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ai-panel .ai-text { font-size: 14.5px; line-height: 1.8; white-space: pre-wrap; }
+  .ai-panel .ai-loading { color: var(--ink-soft); font-size: 13.5px; font-family: var(--mono); }
+  .ai-panel .ai-error { color: var(--signal); font-size: 13.5px; }
+
+  footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 12px; color: var(--ink-soft); }
+
+  @media (max-width: 520px) {
+    .field-row { grid-template-columns: 1fr; }
+    .summary-bar { gap: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="kicker">PV LITERATURE SURVEILLANCE · PubMed</div>
+    <h1>药物安全性文献监测工具</h1>
+    <div class="sub">数据来源：PubMed（美国国立医学图书馆）· 自动识别个案报告与假阳性噪音</div>
+  </div>
+
+  <form id="searchForm">
+    <div class="field">
+      <label>药品英文通用名（必填，例如 tirzepatide）</label>
+      <input type="text" id="drugName" placeholder="tirzepatide" required>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>检索最近几个月（默认6个月）</label>
+        <input type="number" id="monthsBack" placeholder="6" min="1" max="60">
+      </div>
+      <div class="field">
+        <label>最多显示篇数（默认20）</label>
+        <input type="number" id="maxResults" placeholder="20" min="5" max="100">
+      </div>
+    </div>
+    <button type="submit" id="submitBtn">开始检索</button>
+  </form>
+
+  <div id="status"></div>
+  <div id="error"></div>
+
+  <div id="results">
+    <div class="summary-bar" id="summaryBar"></div>
+
+    <section id="prioritySection" style="display:none;">
+      <h2>⚠ 优先关注：个案报告类文献</h2>
+      <p class="sub">个案报告往往是新安全性信号最早被发现和报道的地方，建议优先查阅。</p>
+      <div id="priorityList"></div>
+    </section>
+
+    <section id="cautionSection" style="display:none;">
+      <h2>⚑ 疑似非目标药物自身不良反应</h2>
+      <p class="sub" id="cautionSub"></p>
+      <div id="cautionList"></div>
+    </section>
+
+    <section>
+      <h2>全部有效检索结果</h2>
+      <p class="sub">按发表时间倒序排列</p>
+      <div id="fullList"></div>
+      <div class="excluded-note" id="excludedNote" style="display:none;"></div>
+    </section>
+
+    <section>
+      <h2>AI 解读</h2>
+      <div class="ai-panel">
+        <div class="ai-label">🤖 由 DeepSeek 生成，仅作辅助参考，不能替代专业判断</div>
+        <div id="aiContent"><div class="ai-loading">等待检索结果...</div></div>
+      </div>
+    </section>
+
+    <footer>
+      本报告基于PubMed标题/摘要关键词检索，可能存在遗漏或误检，仅作为初步文献监测的辅助工具，正式的PV文献监测仍需人工逐篇审阅确认。"疑似非目标药物自身不良反应"的判断基于标题句式模式识别，非100%精确，仅供参考。AI解读部分为大模型自动生成，可能存在错误或过度解读，仅供参考。
+    </footer>
+  </div>
+
+</div>
+
+<script>
+const ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
+const ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi";
+const TOOL_NAME = "pv_literature_monitor_web";
+const CONTACT_EMAIL = "example@example.com";
+
+// 复用同一个Cloudflare Worker，负责安全代持DeepSeek Key
+const AI_PROXY_URL = "https://faers-ai-proxy.elfpoppanda.workers.dev/";
+
+function formatDate(d) {
+  return d.toISOString().slice(0, 10).replace(/-/g, "/");
+}
+
+async function searchPubmed(drugName, monthsBack, maxResults) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 30 * monthsBack);
+
+  const safetyTerms = '(adverse OR "adverse effect" OR "adverse event" OR "adverse reaction" OR toxicity OR "case report" OR "side effect" OR safety)';
+  const query = `("${drugName}"[tiab]) AND ${safetyTerms}`;
+
+  const params = new URLSearchParams({
+    db: "pubmed", term: query, retmode: "json", retmax: String(maxResults),
+    sort: "date", mindate: formatDate(startDate), maxdate: formatDate(endDate),
+    datetype: "pdat", tool: TOOL_NAME, email: CONTACT_EMAIL,
+  });
+
+  const res = await fetch(`${ESEARCH_URL}?${params.toString()}`);
+  if (!res.ok) throw new Error(`检索请求失败，状态码：${res.status}`);
+  const data = await res.json();
+  return {
+    pmids: data?.esearchresult?.idlist || [],
+    total: data?.esearchresult?.count || "0",
+  };
+}
+
+async function fetchSummaries(pmids) {
+  if (!pmids.length) return [];
+  const params = new URLSearchParams({
+    db: "pubmed", id: pmids.join(","), retmode: "json", tool: TOOL_NAME, email: CONTACT_EMAIL,
+  });
+  const res = await fetch(`${ESUMMARY_URL}?${params.toString()}`);
+  if (!res.ok) throw new Error(`获取文献信息失败，状态码：${res.status}`);
+  const data = await res.json();
+  const ids = data?.result?.uids || [];
+  return ids.map(pmid => {
+    const item = data.result[pmid] || {};
+    return {
+      pmid,
+      title: item.title || "（无标题）",
+      journal: item.source || "",
+      pubdate: item.pubdate || "未知日期",
+      pubtypes: item.pubtype || [],
+    };
+  });
+}
+
+function isCaseReport(pubtypes, title) {
+  if (pubtypes.some(t => t.toLowerCase().includes("case report"))) return true;
+  if (title.toLowerCase().includes("case report")) return true;
+  return false;
+}
+
+function classifyRelevance(title, drugName) {
+  const t = title.toLowerCase();
+  const d = drugName.toLowerCase();
+  const offTargetPattern = new RegExp(`${d}\\s+(for|treats?|improves?|resolves?|management of)`);
+  const offTargetIndicators = ["induced", "caused by", "secondary to"];
+  if (offTargetPattern.test(t) && offTargetIndicators.some(ind => t.includes(ind))) {
+    return "off_target";
+  }
+  return "primary";
+}
+
+function isAnomalous(summary) {
+  if (!summary.journal.trim()) {
+    return { anomalous: true, reason: "期刊字段缺失，可能为药品说明书摘要/词条类条目，而非常规研究性文献" };
+  }
+  return { anomalous: false, reason: null };
+}
+
+// 把检索结果整理成清晰文字，作为喂给AI的素材
+function buildAIPrompt({ drugName, monthsBack, total, priority, caution, cleanCount }) {
+  const lines = [];
+  lines.push(`药品：${drugName}`);
+  lines.push(`检索范围：近${monthsBack}个月，共检索到${total}篇相关文献，本次分析${cleanCount}篇`);
+
+  if (priority.length) {
+    lines.push(`\n优先关注的个案报告（共${priority.length}篇）：`);
+    for (const s of priority) lines.push(`- ${s.title}（${s.journal || "未知期刊"}，${s.pubdate}）`);
+  } else {
+    lines.push("\n本次未检索到优先关注的个案报告。");
+  }
+
+  if (caution.length) {
+    lines.push(`\n标记为"疑似非目标药物自身不良反应"的个案报告（共${caution.length}篇，可能是假阳性）：`);
+    for (const s of caution) lines.push(`- ${s.title}`);
+  }
+
+  return lines.join("\n");
+}
+
+async function callAIAnalysis(userPrompt) {
+  const systemPrompt =
+    "你是一名经验丰富的药物警戒（PV）文献监测分析师。你会收到某药品近期安全性相关文献的检索结果摘要" +
+    "（包括优先关注的个案报告标题、以及疑似假阳性的个案报告）。请用专业但易懂的中文写一段解读，内容包括：\n" +
+    "1. 从这些文献标题看，是否有值得重点关注的新颖安全性信号线索，为什么（结合疾病类型、是否为已知常见反应）\n" +
+    "2. 对标记为疑似假阳性的条目，简要说明为什么这类标题容易被关键词检索误抓\n" +
+    "3. 如果没有特别值得关注的新信号，也如实说明，不要过度解读\n" +
+    "4. 结尾提醒：文献标题只能作为初筛线索，具体结论需要查阅全文确认\n" +
+    "不要重复罗列文献标题列表，只写解读性的分析文字，控制在300字左右。";
+
+  const res = await fetch(AI_PROXY_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ systemPrompt, userPrompt }),
+  });
+
+  if (!res.ok) throw new Error(`AI解读请求失败，状态码：${res.status}`);
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error("AI返回格式异常");
+  return content.trim();
+}
+
+const statusEl = document.getElementById("status");
+const errorEl = document.getElementById("error");
+const resultsEl = document.getElementById("results");
+const submitBtn = document.getElementById("submitBtn");
+
+document.getElementById("searchForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  errorEl.style.display = "none";
+  resultsEl.style.display = "none";
+  submitBtn.disabled = true;
+  document.getElementById("aiContent").innerHTML = '<div class="ai-loading">等待检索结果...</div>';
+
+  const drugName = document.getElementById("drugName").value.trim();
+  const monthsBack = parseInt(document.getElementById("monthsBack").value) || 6;
+  const maxResults = parseInt(document.getElementById("maxResults").value) || 20;
+
+  try {
+    statusEl.textContent = "正在从PubMed检索相关文献...";
+    const { pmids, total } = await searchPubmed(drugName, monthsBack, maxResults);
+
+    if (!pmids.length) {
+      statusEl.textContent = "";
+      errorEl.textContent = "未检索到相关文献，请检查药品名拼写，或延长检索时间范围。";
+      errorEl.style.display = "block";
+      submitBtn.disabled = false;
+      return;
+    }
+
+    statusEl.textContent = "正在获取文献详情...";
+    const summaries = await fetchSummaries(pmids);
+
+    const renderedInfo = renderResults({ drugName, monthsBack, total, summaries });
+    statusEl.textContent = "";
+    resultsEl.style.display = "block";
+
+    // 检索结果渲染完后，异步请求AI解读（不阻塞文献列表的展示）
+    document.getElementById("aiContent").innerHTML = '<div class="ai-loading">DeepSeek 正在分析检索结果，请稍候...</div>';
+    try {
+      const aiPrompt = buildAIPrompt({
+        drugName, monthsBack, total,
+        priority: renderedInfo.priority,
+        caution: renderedInfo.caution,
+        cleanCount: renderedInfo.clean.length,
+      });
+      const aiText = await callAIAnalysis(aiPrompt);
+      document.getElementById("aiContent").innerHTML = `<div class="ai-text"></div>`;
+      document.querySelector(".ai-text").textContent = aiText;
+    } catch (aiErr) {
+      document.getElementById("aiContent").innerHTML =
+        `<div class="ai-error">AI解读暂时不可用：${aiErr.message}（检索结果不受影响，可稍后重试）</div>`;
+    }
+  } catch (err) {
+    statusEl.textContent = "";
+    errorEl.textContent = "查询出错：" + err.message;
+    errorEl.style.display = "block";
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+function paperCard(s, extraClass, tagHtml) {
+  return `
+    <div class="paper-card ${extraClass}">
+      <div class="paper-title">${s.title}${tagHtml}</div>
+      <div class="paper-meta">${s.journal || "未知期刊"} · ${s.pubdate} · <a href="https://pubmed.ncbi.nlm.nih.gov/${s.pmid}/" target="_blank" rel="noopener">PubMed ↗</a></div>
+    </div>
+  `;
+}
+
+function renderResults({ drugName, monthsBack, total, summaries }) {
+  const anomalous = [];
+  const clean = [];
+  summaries.forEach(s => {
+    const { anomalous: isAnom, reason } = isAnomalous(s);
+    if (isAnom) { s._reason = reason; anomalous.push(s); }
+    else clean.push(s);
+  });
+
+  const caseReports = clean.filter(s => isCaseReport(s.pubtypes, s.title));
+  const priority = [];
+  const caution = [];
+  caseReports.forEach(s => {
+    if (classifyRelevance(s.title, drugName) === "off_target") caution.push(s);
+    else priority.push(s);
+  });
+
+  document.getElementById("summaryBar").innerHTML = `
+    <div><div class="n">${total}</div><div class="l">检索到的相关文献总数</div></div>
+    <div><div class="n">${clean.length}</div><div class="l">本次展示（近${monthsBack}个月）</div></div>
+    <div><div class="n">${priority.length}</div><div class="l">优先关注个案报告</div></div>
+  `;
+
+  const prioritySection = document.getElementById("prioritySection");
+  if (priority.length) {
+    prioritySection.style.display = "block";
+    document.getElementById("priorityList").innerHTML = priority.map(s =>
+      paperCard(s, "priority", "")
+    ).join("");
+  } else {
+    prioritySection.style.display = "none";
+  }
+
+  const cautionSection = document.getElementById("cautionSection");
+  if (caution.length) {
+    cautionSection.style.display = "block";
+    document.getElementById("cautionSub").textContent =
+      `标题模式显示 ${drugName} 疑似是"治疗手段"而非"致病来源"，可能是检索关键词带来的假阳性噪音，建议核实后再判断是否需要关注。`;
+    document.getElementById("cautionList").innerHTML = caution.map(s =>
+      paperCard(s, "caution", "")
+    ).join("");
+  } else {
+    cautionSection.style.display = "none";
+  }
+
+  document.getElementById("fullList").innerHTML = clean.map(s => {
+    let tag = "";
+    if (isCaseReport(s.pubtypes, s.title)) {
+      tag = classifyRelevance(s.title, drugName) === "off_target"
+        ? '<span class="tag caution">个案报告·疑似非目标药物</span>'
+        : '<span class="tag priority">个案报告</span>';
+    }
+    return paperCard(s, "", tag);
+  }).join("");
+
+  const excludedNote = document.getElementById("excludedNote");
+  if (anomalous.length) {
+    excludedNote.style.display = "block";
+    excludedNote.innerHTML = `<strong>已排除 ${anomalous.length} 篇异常条目：</strong>` +
+      anomalous.map(s => `${s.title}（${s._reason}）`).join("；");
+  } else {
+    excludedNote.style.display = "none";
+  }
+
+  return { priority, caution, clean };
+}
+</script>
+</body>
+</html>
